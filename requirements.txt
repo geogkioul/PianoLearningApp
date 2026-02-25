@@ -1,0 +1,35 @@
+# ==========================================
+# Web Backend & API (gui/app.py)
+# ==========================================
+Flask>=3.0.0
+Flask-Cors>=4.0.0
+Werkzeug>=3.0.0
+
+# ==========================================
+# Audio Processing & DSP (src/dsp_transcriber.py)
+# ==========================================
+librosa>=0.10.1
+soundfile>=0.12.1
+scipy>=1.11.4
+numpy>=1.26.4
+
+# ==========================================
+# MIDI Processing & Synthesis
+# ==========================================
+pretty_midi>=0.2.10
+midi2audio>=0.1.1
+symusic>=0.4.3
+
+# ==========================================
+# AI & Machine Learning (src/dl_transcriber.py, src/difficulty_eval.py)
+# ==========================================
+torch>=2.2.0
+transkun>=0.1.2
+miditok>=3.0.1
+setuptools==69.5.1
+
+# ==========================================
+# Evaluation & Metrics (evaluate_two_midis.py)
+# ==========================================
+mir_eval>=0.7
+pandas>=2.1.4

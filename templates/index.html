@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PlayWise</title>
+    <style>
+        body{margin:0;padding:20px;background:#0f0f19;color:#fff;font-family:'Segoe UI',sans-serif;overflow-x:hidden}
+        .container{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;align-items:center}
+        h1{color:#50c8ff;margin-bottom:5px;text-shadow:0 0 10px rgba(80,200,255,0.3);font-size:28px}
+        .subtitle{color:#888;font-size:13px;margin-bottom:15px}
+        .badge{background:#ff9800;color:#000;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:bold;display:inline-block;margin-left:8px}
+        .panel{background:#1a1a2e;padding:20px;border-radius:12px;width:100%;margin-bottom:20px;box-shadow:0 4px 15px rgba(0,0,0,0.3);text-align:center}
+        .section-title{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px;border-bottom:1px solid #333;padding-bottom:5px;width:100%}
+        button{padding:8px 16px;margin:5px;font-size:14px;border:none;border-radius:5px;cursor:pointer;background:linear-gradient(135deg,#3c3c50 0%,#2a2a35 100%);color:#fff;transition:all 0.2s;border:1px solid #444}
+        button:hover:not(:disabled){background:#505064;transform:translateY(-2px)}
+        button.primary{background:linear-gradient(135deg,#ff9800 0%,#f57c00 100%);border:none}
+        button.success{background:linear-gradient(135deg,#4caf50 0%,#2e7d32 100%);border:none}
+        button:disabled{opacity:0.5;cursor:default;transform:none}
+        .upload-row{display:flex;justify-content:center;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:15px}
+        .logo-container{display:flex;align-items:center;justify-content:center;padding:10px}
+        .logo-container img{height:180px;width:auto;border-radius:8px;box-shadow:0 4px 10px rgba(80,200,255,0.3)}
+        .upload-box{border:1px dashed #555;padding:15px;border-radius:8px;width:250px;display:flex;flex-direction:column;align-items:center;gap:10px}
+        .upload-box:hover{border-color:#ff9800;background:rgba(255,152,0,0.05)}
+        input[type="file"]{font-size:12px;color:#aaa;max-width:100%}
+        .speed-btn{padding:5px 12px;font-size:12px;background:#2a2a35;border:1px solid #444;color:#ccc}
+        .speed-btn.active-speed{background:#50c8ff;color:#000;border-color:#50c8ff;font-weight:bold}
+        #canvas-wrapper{position:relative;width:100%;height:600px;background:#111;border-radius:8px;border:1px solid #333}
+        canvas{display:block;width:100%;height:100%}
+        audio{width:100%;margin-top:15px;filter:invert(1) hue-rotate(180deg);opacity:0.8}
+        #downloadBtn{display:none;margin-top:10px}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎹 PlayWise<span class="badge">AI-POWERED</span></h1>
+        <div class="panel">
+            <div class="upload-row">
+                <div class="logo-container">
+                    <img src="/api/logo" alt="PlayWise Logo" onerror="this.style.display='none'">
+                </div>
+                <div class="upload-box">
+                    <span style="color:#ff9800">🎵 Audio → MIDI</span>
+                    <input type="file" id="audioInput" accept=".mp3,.wav,.ogg,.flac,.m4a">
+                    <button class="primary" onclick="handleAudioUpload()">Transcribe</button>
+                    <small style="color:#888;font-size:10px">Powered by Transkun AI</small>
+                </div>
+                <div class="upload-box">
+                    <span style="color:#aaa">🎹 Direct MIDI</span>
+                    <input type="file" id="midiInput" accept=".mid,.midi">
+                    <button onclick="handleMidiUpload()">Load MIDI</button>
+                </div>
+            </div>
+            <div class="section-title">Controls</div>
+            <div>
+                <button id="playBtn" onclick="togglePlay()" disabled>Play/Pause</button>
+                <button id="stopBtn" onclick="stop()" disabled>Stop</button>
+                <button id="downloadBtn" class="success" onclick="downloadMidi()">📥 Download MIDI</button>
+            </div>
+            <div style="margin-top:10px">
+                <span style="color:#aaa;font-size:12px;margin-right:5px">Speed:</span>
+                <button class="speed-btn" onclick="setSpeed(0.25)">x0.25</button>
+                <button class="speed-btn" onclick="setSpeed(0.5)">x0.5</button>
+                <button class="speed-btn" onclick="setSpeed(0.75)">x0.75</button>
+                <button class="speed-btn active-speed" onclick="setSpeed(1.0)">x1.0</button>
+                <button class="speed-btn" onclick="setSpeed(1.5)">x1.5</button>
+            </div>
+           <audio id="audioPlayer" style="display:none"></audio>
+            <div class="status" id="status" style="margin-top:10px;color:#50c8ff">Select audio or MIDI</div>
+        </div>
+        <div id="canvas-wrapper"><canvas id="pianoCanvas"></canvas></div>
+    </div>
+    <script>
+        const CONFIG = {
+            whiteKeyWidth: 0,
+            blackKeyWidth: 0,
+            keyHeight: 180,
+            fallSpeed: 200,
+            pianoY: 0,
+            colors: {
+                white: '#eeeeee',
+                black: '#222222',
+                whitePressed: '#4facfe',
+                blackPressed: '#00f2fe',
+                bg: '#111111',
+                note: '#4facfe',
+                grid: '#222'
+            }
+        };
+
+        let songData = { notes: [], duration: 0 }, isPlaying = false, animationId;
+        let audio = document.getElementById('audioPlayer'), canvas = document.getElementById('pianoCanvas');
+        let ctx = canvas.getContext('2d', { alpha: false });
+        const WHITE_KEYS = [0, 2, 4, 5, 7, 9, 11], BLACK_KEYS = [1, 3, 6, 8, 10];
+
+        // --- INITIALIZATION ---
+        function resize() {
+            canvas.width = document.getElementById('canvas-wrapper').clientWidth;
+            canvas.height = document.getElementById('canvas-wrapper').clientHeight;
+            CONFIG.whiteKeyWidth = canvas.width / 52;
+            CONFIG.blackKeyWidth = CONFIG.whiteKeyWidth * 0.6;
+            CONFIG.pianoY = canvas.height - CONFIG.keyHeight;
+            draw();
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- AUDIO SYNC ---
+        audio.addEventListener('canplaythrough', () => {
+            disableControls(false);
+            const statusDiv = document.getElementById('status');
+            if (!statusDiv.innerHTML.includes('Ready')) {
+                statusDiv.innerHTML += '<br><span style="color:#4caf50">● Ready to Play</span>';
+            }
+        }, false);
+
+        // --- HANDLERS ---
+        function handleAudioUpload() {
+            const file = document.getElementById('audioInput').files[0];
+            if (!file) return;
+            
+            stop(); 
+            disableControls(true);
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            document.getElementById('status').innerHTML = '<strong>Transcribing...</strong><br>Please wait...';
+
+            fetch('/api/upload_audio', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        songData = data;
+                        document.getElementById('status').innerHTML = `✨ Transcribed: ${data.filename}<br><span style="color:#ffeb3b;font-weight:bold">Difficulty: ${data.difficulty_label} (${data.difficulty_score}/10)</span>`;
+                        setupAudioSource();
+                    } else {
+                        document.getElementById('status').textContent = 'Error: ' + data.error;
+                        disableControls(false);
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('status').textContent = 'Network Error';
+                    disableControls(false);
+                });
+        }
+
+        function handleMidiUpload() {
+            const file = document.getElementById('midiInput').files[0];
+            if (!file) return;
+            
+            stop(); 
+            disableControls(true);
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            document.getElementById('status').textContent = 'Processing MIDI...';
+
+            fetch('/api/upload_midi', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        songData = data;
+                        document.getElementById('status').innerHTML = `Loaded: ${data.filename}<br><span style="color:#ffeb3b;font-weight:bold">Difficulty: ${data.difficulty_label}</span>`;
+                        setupAudioSource();
+                    } else {
+                        document.getElementById('status').textContent = 'Error: ' + data.error;
+                        disableControls(false);
+                    }
+                });
+        }
+
+        function setupAudioSource() {
+            audio.src = '/api/audio?t=' + Date.now();
+            audio.load();
+            audio.pause();
+            audio.currentTime = 0;
+            
+            document.getElementById('downloadBtn').style.display = 'inline-block';
+            draw();
+
+            // Safety timeout for local environments
+            setTimeout(() => {
+                if (document.getElementById('playBtn').disabled) disableControls(false);
+            }, 4000);
+        }
+
+        // --- CONTROLS ---
+        function togglePlay() {
+            if (!songData.notes || songData.notes.length === 0) return;
+
+            if (audio.paused) {
+                audio.play().then(() => {
+                    isPlaying = true;
+                    loop();
+                }).catch(err => console.error("Playback blocked:", err));
+            } else {
+                audio.pause();
+                isPlaying = false;
+                cancelAnimationFrame(animationId);
+            }
+        }
+
+        function stop() {
+            audio.pause();
+            audio.currentTime = 0;
+            isPlaying = false;
+            cancelAnimationFrame(animationId);
+            draw();
+        }
+
+        function disableControls(d) {
+            document.getElementById('playBtn').disabled = d;
+            document.getElementById('stopBtn').disabled = d;
+        }
+
+        function setSpeed(s) {
+            audio.playbackRate = s;
+            document.querySelectorAll('.speed-btn').forEach(btn => {
+                btn.classList.toggle('active-speed', btn.innerText === 'x' + s || btn.innerText === 'x' + s + '.0');
+            });
+        }
+
+        function downloadMidi() { window.location.href = '/api/download_midi'; }
+
+        // --- ENGINE ---
+        function loop() {
+            if (!isPlaying) return;
+            draw();
+            animationId = requestAnimationFrame(loop);
+        }
+
+        function getNoteX(p) {
+            let w = 0;
+            for (let i = 21; i < p; i++) {
+                if (WHITE_KEYS.includes(i % 12)) w++;
+            }
+            return WHITE_KEYS.includes(p % 12) ? w * CONFIG.whiteKeyWidth : (w * CONFIG.whiteKeyWidth) - (CONFIG.blackKeyWidth / 2);
+        }
+
+        function draw() {
+            const t = audio.currentTime, W = canvas.width, H = canvas.height;
+            ctx.fillStyle = CONFIG.colors.bg;
+            ctx.fillRect(0, 0, W, H);
+            
+            // Grid Lines
+            ctx.strokeStyle = CONFIG.colors.grid;
+            ctx.beginPath();
+            for (let i = 0; i < 52; i++) {
+                let x = i * CONFIG.whiteKeyWidth;
+                ctx.moveTo(x, 0); ctx.lineTo(x, CONFIG.pianoY);
+            }
+            ctx.stroke();
+
+            const active = new Set();
+            
+            // Falling Notes
+            for (let note of songData.notes) {
+                const h = (note.end - note.start) * CONFIG.fallSpeed;
+                const y = CONFIG.pianoY - h - (note.start - t) * CONFIG.fallSpeed;
+                
+                if (y > CONFIG.pianoY || y + h < 0) {
+                    if (note.start <= t && note.end >= t) active.add(note.pitch);
+                    continue;
+                }
+                
+                const isBlack = BLACK_KEYS.includes(note.pitch % 12);
+                const w = isBlack ? CONFIG.blackKeyWidth : CONFIG.whiteKeyWidth * 0.9;
+                const x = getNoteX(note.pitch) + (isBlack ? 0 : CONFIG.whiteKeyWidth * 0.05);
+                
+                ctx.fillStyle = `hsl(${200 + (note.velocity / 2)}, 80%, 60%)`;
+                ctx.fillRect(x, y, w, h);
+                
+                if (note.start <= t && note.end >= t) active.add(note.pitch);
+            }
+
+            // Piano Keys
+            let wIdx = 0;
+            for (let i = 21; i <= 108; i++) {
+                if (WHITE_KEYS.includes(i % 12)) {
+                    const x = wIdx * CONFIG.whiteKeyWidth;
+                    const pressed = active.has(i);
+                    ctx.fillStyle = pressed ? CONFIG.colors.whitePressed : CONFIG.colors.white;
+                    ctx.fillRect(x, CONFIG.pianoY, CONFIG.whiteKeyWidth, CONFIG.keyHeight);
+                    ctx.strokeStyle = '#666';
+                    ctx.strokeRect(x, CONFIG.pianoY, CONFIG.whiteKeyWidth, CONFIG.keyHeight);
+                    wIdx++;
+                }
+            }
+            
+            wIdx = 0;
+            for (let i = 21; i <= 108; i++) {
+                if (WHITE_KEYS.includes(i % 12)) wIdx++;
+                else {
+                    const x = getNoteX(i);
+                    const pressed = active.has(i);
+                    ctx.fillStyle = pressed ? CONFIG.colors.blackPressed : CONFIG.colors.black;
+                    ctx.fillRect(x, CONFIG.pianoY, CONFIG.blackKeyWidth, CONFIG.keyHeight * 0.65);
+                    ctx.strokeStyle = '#555';
+                    ctx.strokeRect(x, CONFIG.pianoY, CONFIG.blackKeyWidth, CONFIG.keyHeight * 0.65);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
